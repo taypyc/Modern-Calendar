@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import {
   ChevronLeft,
   ChevronRight,
@@ -315,6 +316,12 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
+          <Link
+            href="/customers"
+            className="text-sm font-medium text-white/90 hover:text-white underline-offset-4 hover:underline"
+          >
+            Customers
+          </Link>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/70" />
             <input

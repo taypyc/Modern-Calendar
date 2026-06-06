@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,7 +17,11 @@ import {
   Pause,
   Sparkles,
   X,
+  LogIn,
+  Loader2,
 } from "lucide-react"
+
+type AuthUser = { id: string; email: string; name: string | null }
 
 interface CalendarEvent {
   id: number
@@ -70,6 +75,33 @@ export default function Home() {
   const [currentMonth, setCurrentMonth] = useState("March 2025")
   const [currentDate, setCurrentDate] = useState("March 5")
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authTab, setAuthTab] = useState<"signin" | "signup">("signin")
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [signInEmail, setSignInEmail] = useState("")
+  const [signInPassword, setSignInPassword] = useState("")
+  const [signUpName, setSignUpName] = useState("")
+  const [signUpEmail, setSignUpEmail] = useState("")
+  const [signUpPassword, setSignUpPassword] = useState("")
+  const [signUpConfirm, setSignUpConfirm] = useState("")
+
+  useEffect(() => {
+    void fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d: { user: AuthUser | null }) => {
+        setAuthUser(d.user)
+      })
+      .catch(() => {
+        setAuthUser(null)
+      })
+      .finally(() => {
+        setAuthChecked(true)
+      })
+  }, [])
 
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event)
@@ -293,6 +325,72 @@ export default function Home() {
     // Here you would typically also control the actual audio playback
   }
 
+  const avatarLetter = authUser
+    ? (authUser.name?.trim()?.charAt(0) || authUser.email?.charAt(0) || "?").toUpperCase()
+    : "U"
+
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault()
+    setAuthError(null)
+    setAuthSubmitting(true)
+    try {
+      const res = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: signInEmail, password: signInPassword }),
+      })
+      const data = (await res.json()) as { error?: string; user?: AuthUser }
+      if (!res.ok) {
+        setAuthError(data.error ?? "Sign in failed")
+        return
+      }
+      if (data.user) setAuthUser(data.user)
+      setAuthModalOpen(false)
+      setSignInPassword("")
+    } finally {
+      setAuthSubmitting(false)
+    }
+  }
+
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault()
+    setAuthError(null)
+    if (signUpPassword !== signUpConfirm) {
+      setAuthError("Passwords do not match")
+      return
+    }
+    setAuthSubmitting(true)
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: signUpEmail,
+          password: signUpPassword,
+          name: signUpName.trim() ? signUpName.trim() : null,
+        }),
+      })
+      const data = (await res.json()) as { error?: string; user?: AuthUser }
+      if (!res.ok) {
+        setAuthError(data.error ?? "Could not create account")
+        return
+      }
+      if (data.user) setAuthUser(data.user)
+      setAuthModalOpen(false)
+      setSignUpPassword("")
+      setSignUpConfirm("")
+      setSignUpName("")
+      setSignUpEmail("")
+    } finally {
+      setAuthSubmitting(false)
+    }
+  }
+
+  async function handleSignOut() {
+    await fetch("/api/auth/signout", { method: "POST" })
+    setAuthUser(null)
+  }
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       {/* Background Image */}
@@ -315,6 +413,35 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
+          <Link
+            href="/customers"
+            className="text-sm font-medium text-white/90 hover:text-white underline-offset-4 hover:underline"
+          >
+            Customers
+          </Link>
+          {authChecked &&
+            (authUser ? (
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="text-sm font-medium text-white/90 hover:text-white underline-offset-4 hover:underline"
+              >
+                Sign out
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthTab("signin")
+                  setAuthError(null)
+                  setAuthModalOpen(true)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm hover:bg-white/20"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign in
+              </button>
+            ))}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/70" />
             <input
@@ -325,7 +452,7 @@ export default function Home() {
           </div>
           <Settings className="h-6 w-6 text-white drop-shadow-md" />
           <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shadow-md">
-            U
+            {avatarLetter}
           </div>
         </div>
       </header>
@@ -545,6 +672,165 @@ export default function Home() {
                     <span>Pause Hans Zimmer</span>
                   </button>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {authModalOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+            onClick={() => setAuthModalOpen(false)}
+            role="presentation"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="auth-dialog-title"
+            >
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <h2 id="auth-dialog-title" className="text-xl font-semibold text-white drop-shadow-sm">Customer account</h2>
+                <button
+                  type="button"
+                  onClick={() => setAuthModalOpen(false)}
+                  className="rounded-full p-1 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mb-6 flex rounded-lg bg-black/25 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab("signin")
+                    setAuthError(null)
+                  }}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    authTab === "signin" ? "bg-white/20 text-white shadow-sm" : "text-white/60 hover:text-white/90"
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthTab("signup")
+                    setAuthError(null)
+                  }}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                    authTab === "signup" ? "bg-white/20 text-white shadow-sm" : "text-white/60 hover:text-white/90"
+                  }`}
+                >
+                  Sign up
+                </button>
+              </div>
+              {authError && (
+                <div className="mb-4 rounded-lg border border-red-400/40 bg-red-950/50 px-3 py-2 text-sm text-red-100">
+                  {authError}
+                </div>
+              )}
+              {authTab === "signin" ? (
+                <form
+                  onSubmit={(e) => void handleSignIn(e)}
+                  className="space-y-4"
+                >
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Email</span>
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={signInEmail}
+                      onChange={(e) => setSignInEmail(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Password</span>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={signInPassword}
+                      onChange={(e) => setSignInPassword(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="••••••••"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={authSubmitting}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-blue-600 disabled:opacity-60"
+                  >
+                    {authSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Sign in
+                  </button>
+                </form>
+              ) : (
+                <form
+                  onSubmit={(e) => void handleSignUp(e)}
+                  className="space-y-4"
+                >
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Name (optional)</span>
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      value={signUpName}
+                      onChange={(e) => setSignUpName(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="Jane Doe"
+                    />
+                  </label>
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Email</span>
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={signUpEmail}
+                      onChange={(e) => setSignUpEmail(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="you@example.com"
+                    />
+                  </label>
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Password</span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      value={signUpPassword}
+                      onChange={(e) => setSignUpPassword(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="At least 8 characters"
+                    />
+                  </label>
+                  <label className="block text-sm text-white/80">
+                    <span className="mb-1 block">Confirm password</span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      value={signUpConfirm}
+                      onChange={(e) => setSignUpConfirm(e.target.value)}
+                      className="w-full rounded-lg border border-white/30 bg-black/25 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      placeholder="Repeat password"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={authSubmitting}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-blue-600 disabled:opacity-60"
+                  >
+                    {authSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Create account
+                  </button>
+                </form>
               )}
             </div>
           </div>

@@ -1,9 +1,27 @@
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Client } from "@neondatabase/serverless"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const root = join(__dirname, "..")
+
+function loadEnvFile(path) {
+  if (!existsSync(path)) return
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const eq = trimmed.indexOf("=")
+    if (eq === -1) continue
+    const key = trimmed.slice(0, eq).trim()
+    if (process.env[key] !== undefined) continue
+    process.env[key] = trimmed.slice(eq + 1).trim()
+  }
+}
+
+loadEnvFile(join(root, ".env"))
+loadEnvFile(join(root, ".env.local"))
+
 const url = process.env.DATABASE_URL
 
 if (!url?.trim()) {
